@@ -1,79 +1,165 @@
 import pygame
 import os
 from pygame.locals import *
-import time
+import random
 
-main_dir = os.path.split(os.path.abspath(__file__))[0]
-data_dir = os.path.join(main_dir, "data")
+BG = 27, 64, 34
+FPS = 4
+BLK_SIZE = 30
+WINDOW_SIZE = W_WIDTH, W_HEIGTH = 800, 600
+DIRECTION = {
+    K_LEFT: [-BLK_SIZE, 0],
+    K_RIGHT: [BLK_SIZE, 0],
+    K_UP: [0, -BLK_SIZE],
+    K_DOWN: [0, BLK_SIZE],
+}
 
-bg = 27, 64, 34
+
+def loadImage(name, colorKey=None):
+    fullName = os.path.join('data', name)
+    try:
+        image = pygame.image.load(fullName)
+    except pygame.error:
+        print('Cannot load image:', name)
+        raise SystemExit(str(geterror()))
+    image = image.convert()
+    if colorKey is not None:
+        if colorKey is -1:
+            colorKey = image.get_at((0, 0))
+        image.set_colorkey(colorKey, RLEACCEL)
+    return image, image.get_rect()
+
+
+class Apple:
+    def __init__(self, parentScreen):
+        self.apple, rect = loadImage('apple.png', -1)
+        self.apple = pygame.transform.scale(
+            self.apple, (BLK_SIZE, BLK_SIZE))
+        self.parentScreen = parentScreen
+        self.move()
+
+    def draw(self):
+        self.parentScreen.blit(self.apple, self.pos)
+        pygame.display.flip()
+
+    def move(self):
+        x = random.randrange(0, W_WIDTH - BLK_SIZE, step=BLK_SIZE)
+        y = random.randrange(0, W_HEIGTH - BLK_SIZE, step=BLK_SIZE)
+        self.pos = [x, y]
 
 
 class Snake:
-
-    def __init__(self, parentScreen):
+    def __init__(self, parentScreen, length):
+        self.length = length
         self.parentScreen = parentScreen
-        fullName = os.path.join(data_dir, 'block.jpg')
-        self.block = pygame.image.load(fullName).convert()
-        self.x = 100
-        self.y = 100
+
+        self.block, rect = loadImage('block.jpg', -1)
+        self.block = pygame.transform.scale(self.block, (BLK_SIZE, BLK_SIZE))
+
+        self.xy = [[BLK_SIZE, BLK_SIZE]]*length
         self.direction = K_DOWN
+
+    def increaseLength(self):
+        self.length += 1
+        self.xy.append([-1, -1])
 
     def draw(self):
-        self.parentScreen.fill(bg)
-        self.parentScreen.blit(self.block, (self.x, self.y))
+        self.parentScreen.fill(BG)
+        for i in range(self.length):
+            self.parentScreen.blit(self.block, self.xy[i])
         pygame.display.flip()
 
-    def moveLeft(self):
-        self.direction = K_LEFT
-
-    def moveRight(self):
-        self.direction = K_RIGHT
-
-    def moveUp(self):
-        self.direction = K_UP
-
-    def moveDown(self):
-        self.direction = K_DOWN
-
     def walk(self):
-        if self.direction == K_LEFT:
-            self.x -= 10
-            self.draw()
-        elif self.direction == K_RIGHT:
-            self.x += 10
-            self.draw()
-        elif self.direction == K_UP:
-            self.y -= 10
-            self.draw()
-        elif self.direction == K_DOWN:
-            self.y += 10
-            self.draw()
+        self.xy[1:] = self.xy[:-1]
+
+        self.xy[0] = self.sumPos(self.xy[0], DIRECTION[self.direction])
+
+        self.draw()
+
+    def sumPos(self, pos: list([0, 0]), value: list([0, 0])):
+        return [pos[0] + value[0], pos[1] + value[1]]
 
 
 class Game:
     def __init__(self):
         pygame.init()
-        self.surface = pygame.display.set_mode((500, 500))
-        self.surface.fill(bg)
-        self.snake = Snake(self.surface)
+        self.surface = pygame.display.set_mode(WINDOW_SIZE)
+        self.snake = Snake(self.surface, 1)
         self.snake.draw()
+        self.apple = Apple(self.surface)
+        self.apple.draw()
+        self.pause = False
+        self.clock = pygame.time.Clock()
+
+    def play(self):
+        self.snake.walk()
+        self.apple.draw()
+        self.displayScore()
+        self.snacking()
+
+        if self.isOver():
+            self.pause = True
+            self.showGameOver()
+
+        pygame.display.flip()
+
+    def isOver(self):
+        snk = self.snake
+        for i in range(1, self.snake.length):
+            if snk.xy[0][0] == snk.xy[i][0] and snk.xy[0][1] == snk.xy[i][1]:
+                return True
+        if snk.xy[0][0] < 0 or snk.xy[0][0] >= W_WIDTH or \
+                snk.xy[0][1] < 0 or snk.xy[0][1] >= W_HEIGTH:
+            return True
+        return False
+
+    def snacking(self):
+        if self.snake.xy[0] == self.apple.pos:
+            self.snake.increaseLength()
+            self.apple.move()
+
+    def showGameOver(self):
+        self.surface.fill(BG)
+        font = pygame.font.SysFont(None, 30)
+        line1 = font.render(
+            f'Game is Over! You score is {self.snake.length}', True, (255, 255, 255))
+        self.surface.blit(line1, (200, 300))
+        line2 = font.render(
+            f'To play again, press Enter. To exit press Escape!', True, (255, 255, 255))
+        self.surface.blit(line2, (200, 350))
+        pygame.display.flip()
+
+    def displayScore(self):
+        font = pygame.font.SysFont(None, 30)
+        score = font.render(
+            f'Score: {self.snake.length}', True, (255, 255, 255))
+        self.surface.blit(score, (400, 10))
+
+    def reset(self):
+        self.pause = False
+        self.snake = Snake(self.surface, 1)
+        self.apple = Apple(self.surface)
 
     def run(self):
         running = True
-
         while running:
             for event in pygame.event.get():
                 if event.type == KEYDOWN:
                     if event.key == K_ESCAPE:
                         running = False
+                    elif event.key == K_RETURN:
+                        self.reset()
+                    elif event.key == K_SPACE:
+                        self.pause = not self.pause
+
                     elif event.key in [K_UP, K_DOWN, K_LEFT, K_RIGHT]:
                         self.snake.direction = event.key
 
                 elif event.type == QUIT:
                     running = False
-            time.sleep(0.2)
-            self.snake.walk()
+            if not self.pause:
+                self.play()
+            self.clock.tick(FPS)
 
 
 if __name__ == '__main__':
