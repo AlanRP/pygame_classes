@@ -4,14 +4,12 @@ from pygame.locals import *
 import random
 
 BG = 27, 64, 34
-FPS = 4
+FPS = 6
 BLK_SIZE = 30
-WINDOW_SIZE = W_WIDTH, W_HEIGTH = 800, 600
+WINDOW_SIZE = W_WIDTH, W_HEIGTH = 720, 540
 DIRECTION = {
-    K_LEFT: [-BLK_SIZE, 0],
-    K_RIGHT: [BLK_SIZE, 0],
-    K_UP: [0, -BLK_SIZE],
-    K_DOWN: [0, BLK_SIZE],
+    K_LEFT: [-BLK_SIZE, 0], K_RIGHT: [BLK_SIZE, 0],
+    K_UP: [0, -BLK_SIZE], K_DOWN: [0, BLK_SIZE],
 }
 
 
@@ -36,22 +34,28 @@ class Apple:
         self.apple = pygame.transform.scale(
             self.apple, (BLK_SIZE, BLK_SIZE))
         self.parentScreen = parentScreen
-        self.move()
+        self.pos = [0, 0]
 
     def draw(self):
         self.parentScreen.blit(self.apple, self.pos)
         pygame.display.flip()
 
-    def move(self):
-        x = random.randrange(0, W_WIDTH - BLK_SIZE, step=BLK_SIZE)
-        y = random.randrange(0, W_HEIGTH - BLK_SIZE, step=BLK_SIZE)
-        self.pos = [x, y]
+    def move(self, xyException):
+
+        while True:
+            x = random.randrange(0, W_WIDTH - BLK_SIZE, step=BLK_SIZE)
+            y = random.randrange(0, W_HEIGTH - BLK_SIZE, step=BLK_SIZE)
+            self.pos = [x, y]
+            if self.pos not in xyException:
+                break
+        self.draw()
 
 
 class Snake:
     def __init__(self, parentScreen, length):
         self.length = length
         self.parentScreen = parentScreen
+        self.color = [6, 155, 0]
 
         self.block, rect = loadImage('block.jpg', -1)
         self.block = pygame.transform.scale(self.block, (BLK_SIZE, BLK_SIZE))
@@ -65,9 +69,13 @@ class Snake:
 
     def draw(self):
         self.parentScreen.fill(BG)
-        for i in range(self.length):
-            self.parentScreen.blit(self.block, self.xy[i])
-        pygame.display.flip()
+        for i, [x, y] in enumerate(self.xy):
+            j = i if i < 25 else 25
+            q = j*j
+            _color = -q + 28*j + 50, int(-0.1*q + 240), int(0.3 * q)
+            # print(_color)
+            pygame.draw.rect(
+                self.parentScreen, _color, [x + 1, y + 1, BLK_SIZE - 2, BLK_SIZE - 2])
 
     def walk(self):
         self.xy[1:] = self.xy[:-1]
@@ -84,21 +92,22 @@ class Game:
     def __init__(self):
         pygame.init()
         self.surface = pygame.display.set_mode(WINDOW_SIZE)
-        self.snake = Snake(self.surface, 1)
+        self.snake = Snake(self.surface, 30)
         self.snake.draw()
         self.apple = Apple(self.surface)
-        self.apple.draw()
+        self.apple.move(self.snake.xy)
         self.pause = False
+        self.gameOver = False
         self.clock = pygame.time.Clock()
 
     def play(self):
         self.snake.walk()
-        self.apple.draw()
         self.displayScore()
         self.snacking()
 
         if self.isOver():
             self.pause = True
+            self.gameOver = True
             self.showGameOver()
 
         pygame.display.flip()
@@ -116,10 +125,12 @@ class Game:
     def snacking(self):
         if self.snake.xy[0] == self.apple.pos:
             self.snake.increaseLength()
-            self.apple.move()
+            self.apple.move(self.snake.xy)
+        else:
+            self.apple.draw()
 
     def showGameOver(self):
-        self.surface.fill(BG)
+        # self.surface.fill(BG)
         font = pygame.font.SysFont(None, 30)
         line1 = font.render(
             f'Game is Over! You score is {self.snake.length}', True, (255, 255, 255))
@@ -137,6 +148,7 @@ class Game:
 
     def reset(self):
         self.pause = False
+        self.gameOver = False
         self.snake = Snake(self.surface, 1)
         self.apple = Apple(self.surface)
 
@@ -147,9 +159,9 @@ class Game:
                 if event.type == KEYDOWN:
                     if event.key == K_ESCAPE:
                         running = False
-                    elif event.key == K_RETURN:
+                    elif event.key == K_RETURN and self.gameOver:
                         self.reset()
-                    elif event.key == K_SPACE:
+                    elif event.key == K_SPACE and not self.gameOver:
                         self.pause = not self.pause
 
                     elif event.key in [K_UP, K_DOWN, K_LEFT, K_RIGHT]:
